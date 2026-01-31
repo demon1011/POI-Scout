@@ -152,18 +152,22 @@ python main.py --online-opt --opt-iterations 15 --use-skill --create-skill
 
 对于不清晰或模糊的搜索请求，可能存在多个符合条件的POI。Agent通过设计多步骤的搜索计划，探索多个可能方向的候选POI后进行聚合，从而最大化覆盖用户潜在需求。
 
-### 2. 基于Reflection的在线优化
+### 2. 基于Reflection的在线优化（On-policy）
 
 由于外部搜索工具的黑盒性，模型可能不知道如何提出搜索请求才能最大程度增加POI的召回数量。我们参考 [TextGrad](https://arxiv.org/abs/2406.07496) 框架，通过 **Reflection** 机制让模型定位搜索效率较低的步骤，并检视整个搜索过程（每个步骤的搜索请求由ReAct Agent执行）对该步骤进行改进。
 
 为提高优化过程的稳定性，我们采用了正则化手段（如重新采样等方法），防止优化陷入局部最优点。
 
+> **为什么称为 On-policy？** 在本项目中，我们将"策略"定义为 Agent 针对特定请求生成的搜索方案（plan）。On-policy 指的是：当前方案执行产生反馈（POI数量、搜索效率等）→ 用这些反馈改进**同一个方案**。策略与数据来源绑定，符合强化学习中 on-policy 的核心特征。
+
 ![优化过程](docs/images/poi_optimization.png)
 *图：某个搜索任务的优化步骤曲线（请求："金华适合带娃的地方"）*
 
-### 3. 离线经验总结与复用
+### 3. 离线经验总结与复用（Off-policy）
 
 为保留在线优化探索的经验，我们对比优化前后的方案和结果，通过语言形式形成一次 **GAE（Generalized Advantage Estimation）**，然后让模型自动总结经验作为 skill，供后续类似搜索请求使用。此方法参考 [GEPA](https://arxiv.org/abs/2507.19457) 的设计思路。
+
+> **为什么称为 Off-policy？** 这里的经验来自**其他任务的搜索方案**执行结果，而非当前任务。用"别人的经验"来辅助当前任务的方案生成，策略与数据来源分离，体现了 off-policy 跨策略经验复用的思想。
 
 **实验结果**（n=15）：使用skills后POI召回数量提升**17.3%**（均值30.1→35.3），差异具有统计显著性（p=0.035, Cohen's d=0.815）。
 
@@ -192,8 +196,8 @@ python main.py --online-opt --opt-iterations 15 --use-skill --create-skill
 
 ### 搜索与优化
 - **多步骤规划**：自动将模糊需求分解为多个搜索主题
-- **在线优化（On-policy）**：基于TextGrad的Reflection机制，实时优化搜索策略
-- **离线学习（Off-policy）**：基于GEPA的经验总结，生成可复用的skills
+- **在线优化（On-policy）**：基于TextGrad的Reflection机制，用当前方案的执行反馈迭代优化当前方案
+- **离线学习（Off-policy）**：基于GEPA的经验总结，从历史任务中提取可复用的skills用于新任务
 
 ### 工具能力层
 - **Playwright**：无头浏览器爬虫，支持JavaScript渲染和动态网页
