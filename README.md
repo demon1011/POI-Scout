@@ -8,7 +8,7 @@
 <tr>
 <td width="50%">
 
-**搜索界面**：输入需求，Agent 自动规划多步搜索
+**主界面**：创建新任务或加载已有任务
 ![主界面](docs/images/main_interface.png)
 
 </td>
