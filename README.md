@@ -105,3 +105,7 @@ POI-Scout/
 ## License
 
 MIT License
+
+## 联系方式
+
+邮箱：184380405@qq.com

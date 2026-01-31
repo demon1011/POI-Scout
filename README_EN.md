@@ -105,3 +105,7 @@ POI-Scout/
 ## License
 
 MIT License
+
+## Contact
+
+Email: 184380405@qq.com
