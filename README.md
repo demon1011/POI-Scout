@@ -1,6 +1,10 @@
 # POI-Scout
 
-一个智能旅行目的地搜索Agent，通过搜索API和爬虫组合的工具搜索满足用户需求的POI（Point of Interest），并支持在线/离线优化和交互式筛选。
+> "周末想带孩子去个好玩的地方" —— 只需一句话，POI-Scout 帮你搜遍全网、筛选出最合适的目的地。
+
+一个智能旅行目的地搜索 Agent，通过搜索 API 和爬虫组合的工具搜索满足用户需求的 POI（Point of Interest），并支持在线/离线优化和交互式筛选。
+
+**核心能力**：模糊需求理解 → 多维度搜索 → 自我优化 → 智能筛选
 
 ## 特性
 
@@ -46,7 +50,7 @@ POI-Scout/
 ### 1. 克隆项目
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/demon1011/POI-Scout.git
 cd POI-Scout
 ```
 
@@ -165,7 +169,7 @@ python main.py --online-opt --opt-iterations 15 --use-skill --create-skill
 
 ### 3. 离线经验总结与复用（Off-policy）
 
-为保留在线优化探索的经验，我们对比优化前后的方案和结果，通过语言形式形成一次 **GAE（Generalized Advantage Estimation）**，然后让模型自动总结经验作为 skill，供后续类似搜索请求使用。此方法参考 [GEPA](https://arxiv.org/abs/2507.19457) 的设计思路。
+为保留在线优化探索的经验，我们对比优化前后的方案和结果，借鉴强化学习中 **GAE（Generalized Advantage Estimation）** 的思想——通过对比"改进后"与"改进前"的效果差异来评估优势，以自然语言形式让模型总结"什么样的改进是有效的"，形成可复用的 skill。此方法参考 [GEPA](https://arxiv.org/abs/2507.19457) 的设计思路。
 
 > **为什么称为 Off-policy？** 这里的经验来自**其他任务的搜索方案**执行结果，而非当前任务。用"别人的经验"来辅助当前任务的方案生成，策略与数据来源分离，体现了 off-policy 跨策略经验复用的思想。
 
@@ -184,8 +188,8 @@ python main.py --online-opt --opt-iterations 15 --use-skill --create-skill
 
 | 服务 | 用途 | 获取方式 |
 |------|------|----------|
-| SiliconFlow | 大语言模型和Embedding | https://siliconflow.cn |
-| 博查搜索 | 网页搜索 | https://bochaai.com |
+| SiliconFlow | 大语言模型和Embedding | [siliconflow.cn](https://siliconflow.cn) |
+| 博查搜索 | 网页搜索 | [bochaai.com](https://bochaai.com) |
 
 ## 技术架构
 
