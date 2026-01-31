@@ -152,9 +152,6 @@ python main.py --online-opt --opt-iterations 15 --use-skill --create-skill
 
 对于不清晰或模糊的搜索请求，可能存在多个符合条件的POI。Agent通过设计多步骤的搜索计划，探索多个可能方向的候选POI后进行聚合，从而最大化覆盖用户潜在需求。
 
-![主界面](docs/images/main_interface.png)
-*图：初始交互页面*
-
 ### 2. 基于Reflection的在线优化
 
 由于外部搜索工具的黑盒性，模型可能不知道如何提出搜索请求才能最大程度增加POI的召回数量。我们参考 [TextGrad](https://arxiv.org/abs/2406.07496) 框架，通过 **Reflection** 机制让模型定位搜索效率较低的步骤，并检视整个搜索过程（每个步骤的搜索请求由ReAct Agent执行）对该步骤进行改进。
@@ -176,9 +173,6 @@ python main.py --online-opt --opt-iterations 15 --use-skill --create-skill
 ### 4. 贝叶斯决策树交互选择
 
 为帮助用户进一步确定目的地，我们参考 [贝叶斯实验方法](https://arxiv.org/abs/2508.21184) 设计了用户交互决策树。通过多轮A/B选择，系统能够快速收敛到用户真正感兴趣的POI，大幅减少用户筛选成本。
-
-![交互式筛选界面](docs/images/select_interface.png)
-*图：多轮选择交互页面*
 
 ## API 依赖
 
