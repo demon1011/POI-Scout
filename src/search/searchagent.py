@@ -121,7 +121,7 @@ class search_logger():
         summary="本次搜索任务共搜索到%d个网页，其中%d个是之前已经搜索过的重复网页。新搜索到的网页中共发现%d个候选POI，其中%d个是之前被搜索到的POI,%d个是与用户请求相关的新候选POI，%d个被认为是与用户请求不相关的POI。共搜到%d个与已有或新增POI相关的评论。"%(total_feeds,existed_feeds,total_pois,existed_related_pois,new_realted_pois,new_unrelated_pois,new_comments)
         return summary,search_res_clean
     def add_searchlog(self,step):
-        self.log['process'][step['行动步骤']]=step
+        self.log['process'][str(step['行动步骤'])]=step
     def match_eval(self,poi_info):
         prompt=agent_match_prompt(self.log['query'],poi_info)
         try:
@@ -156,24 +156,27 @@ class search_agent():
         self.logger.log['final_res']=list()
         self.logger.log['final_feeds']=list()
         print("start revision!")
+        # 统一 opt_steps 的键为字符串
+        opt_steps_str = {str(k): v for k, v in opt_steps.items()}
         for step in eval(self.logger.log['plan']):
-            if step["行动步骤"] not in list(opt_steps.keys()):
-                search_res = copy.deepcopy(self.logger.log['process'][step['行动步骤']]['本步骤搜索POI'])
-                feed_list = copy.deepcopy(self.logger.log['process'][step['行动步骤']]['本步骤搜索网页'])
-                search_record = self.logger.log['process'][step['行动步骤']]['搜索过程']
+            step_key = str(step["行动步骤"])  # 统一转换为字符串
+            if step_key not in opt_steps_str:
+                search_res = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索POI'])
+                feed_list = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索网页'])
+                search_record = self.logger.log['process'][step_key]['搜索过程']
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
             else:
                 ###修改plan内容###
                 cur_plan=eval(self.logger.log['plan'])
                 for plan_step in cur_plan:
-                    if plan_step['行动步骤'] == step['行动步骤']:
-                        plan_step['行动规划']=opt_steps[step["行动步骤"]]['行动规划']
-                        plan_step['搜索请求']=opt_steps[step["行动步骤"]]['搜索请求']
+                    if str(plan_step['行动步骤']) == step_key:
+                        plan_step['行动规划']=opt_steps_str[step_key]['行动规划']
+                        plan_step['搜索请求']=opt_steps_str[step_key]['搜索请求']
                         #修改process
-                        step['行动规划']=opt_steps[step["行动步骤"]]['行动规划']
-                        step['搜索请求']=opt_steps[step["行动步骤"]]['搜索请求']
+                        step['行动规划']=opt_steps_str[step_key]['行动规划']
+                        step['搜索请求']=opt_steps_str[step_key]['搜索请求']
                         break
-                search_query=opt_steps[step["行动步骤"]]['搜索请求']
+                search_query=opt_steps_str[step_key]['搜索请求']
                 search_res,feed_list,search_record=self.poi_tool.run(search_query,advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
                 self.logger.log['plan']=str(cur_plan)

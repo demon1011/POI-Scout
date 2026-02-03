@@ -308,9 +308,6 @@ class POISelector:
 
 def demo_menu_mode(online_opt,opt_iterations, use_skill, create_skill):
     """演示菜单模式"""
-    print("=" * 60)
-    print("演示3: 完整菜单模式")
-    print("=" * 60)
     llm=base_llm(system_prompt="")
     agent=Answer_ReActAgent(llm,tools=tools)
     selector = POISelector(

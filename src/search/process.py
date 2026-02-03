@@ -77,13 +77,14 @@ def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_
                     opt_res=json.loads(json_str)
                     print(opt_res)
                     for item in opt_res:
-                        search_content=searcher.logger.log['process'][item['行动步骤']]['搜索过程']
+                        step_key = str(item['行动步骤'])  # 统一转换为字符串
+                        search_content=searcher.logger.log['process'][step_key]['搜索过程']
                         for step_plan in eval(searcher.logger.log['plan']):
-                            if step_plan['行动步骤'] == item['行动步骤']:
+                            if str(step_plan['行动步骤']) == step_key:
                                 cur_plan=step_plan
                                 break
-                        if optimization_steps.count(item['行动步骤'])<optimization_maxtimes:
-                            print(f"start optimization solution for step {item['行动步骤']}!")
+                        if optimization_steps.count(step_key)<optimization_maxtimes:
+                            print(f"start optimization solution for step {step_key}!")
                             cur_problem=item['当前问题']
                             opt_prompt=refine_prompt(search_content,cur_problem,cur_plan)
                             opt_advice=llm.call_with_messages_R1(opt_prompt,temp=0)
@@ -95,21 +96,25 @@ def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_
                             pattern = r"\{[^{}]*(?:'[^']*'[^{}]*)*\}"
                             match=re.search(pattern, new_step)
                             new_step_res=json.loads(match.group())
-                            new_steps[item['行动步骤']]=new_step_res
-                            optimization_steps.append(item['行动步骤'])
+                            new_steps[step_key]=new_step_res
+                            optimization_steps.append(step_key)
                         else:
-                            print(f"start new sample solution for step {item['行动步骤']}!")
+                            print(f"start new sample solution for step {step_key}!")
                             new_sampleprompt=new_sample_prompt(topic,searcher.logger.log['plan'])
                             new_step=llm.call_with_messages_V3(new_sampleprompt,temp=0.6)
                             new_step_res=json.loads(new_step)
-                            new_step_res['行动步骤']=item['行动步骤']
-                            new_steps[item['行动步骤']]=new_step_res
-                            optimization_steps = [x for x in optimization_steps if x != item['行动步骤']]
+                            new_step_res['行动步骤']=step_key
+                            new_steps[step_key]=new_step_res
+                            optimization_steps = [x for x in optimization_steps if x != step_key]
                     result=searcher.revise_execution(new_steps)
                     break
                 except Exception as e:
+                    import traceback
                     print(f"exceptions while optimization of topic {topic} on {j+1} rounds,repeats {retry}!")
-                    print(e)
+                    print(f"Exception type: {type(e).__name__}")
+                    print(f"Exception message: {e}")
+                    print(f"Exception args: {e.args}")
+                    traceback.print_exc()
             log=summary_log(searcher)
             total_log[j+1]=log
     return log,log_ref
