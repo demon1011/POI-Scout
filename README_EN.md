@@ -99,8 +99,22 @@ POI-Scout/
 │   ├── search/          # Search and optimization logic
 │   ├── selector/        # Decision tree filtering
 │   └── tools/           # Crawler and search tools
-└── data/                # Skills and decision tree storage
+│       ├── crawler.py       # Playwright web crawler
+│       ├── crawl_logger.py  # Crawler logging module
+│       └── tools.py         # Search tool wrappers
+└── data/
+    ├── skills/          # Offline experience storage
+    └── crawl_logs/      # Crawler logs (JSON Lines format)
 ```
+
+### Crawler Logging
+
+The crawler module records detailed information for each crawl in real-time, enabling analysis and optimization:
+
+- **Log files**: `data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS.jsonl`
+- **Summary**: `data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS_summary.json`
+
+Recorded fields include: URL, success/failure status, error type (timeout/network/blocked, etc.), response time, content length, domain statistics, and more.
 
 ## License
 

@@ -99,8 +99,22 @@ POI-Scout/
 │   ├── search/          # 搜索与优化逻辑
 │   ├── selector/        # 决策树筛选
 │   └── tools/           # 爬虫与搜索工具
-└── data/                # skills 和决策树存储
+│       ├── crawler.py       # Playwright 网页爬虫
+│       ├── crawl_logger.py  # 爬虫日志记录模块
+│       └── tools.py         # 搜索工具封装
+└── data/
+    ├── skills/          # 离线经验存储
+    └── crawl_logs/      # 爬虫日志（JSON Lines 格式）
 ```
+
+### 爬虫日志
+
+爬虫模块会实时记录每次爬取的详细信息，便于后续分析和优化：
+
+- **日志文件**：`data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS.jsonl`
+- **统计摘要**：`data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS_summary.json`
+
+记录字段包括：URL、成功/失败状态、错误类型（timeout/network/blocked 等）、响应时间、内容长度、域名统计等。
 
 ## License
 
