@@ -79,3 +79,7 @@ Thumbs.db
 # 本地测试数据
 test_data/
 *.local.*
+
+# Crawl logs (generated at runtime)
+data/crawl_logs/*.jsonl
+data/crawl_logs/*_summary.json

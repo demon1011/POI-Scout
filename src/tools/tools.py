@@ -10,9 +10,29 @@ import os
 import asyncio
 import time
 from src.tools.crawler import WebCrawler, CrawlOptions, CrawlResult
+from src.tools.crawl_logger import CrawlLogger
 from src.core.basellm import base_llm
 from src.core.prompts import compress_web
 from config import BOCHA_API_KEY, BOCHA_API_URL
+
+# 全局日志记录器（用于整个会话）
+_session_logger: Optional[CrawlLogger] = None
+
+
+def get_session_logger() -> CrawlLogger:
+    """获取或创建会话级日志记录器"""
+    global _session_logger
+    if _session_logger is None:
+        _session_logger = CrawlLogger()
+    return _session_logger
+
+
+def close_session_logger() -> None:
+    """关闭会话日志记录器并写入摘要"""
+    global _session_logger
+    if _session_logger is not None:
+        _session_logger.close()
+        _session_logger = None
 
 @dataclass
 class Tool:
@@ -22,10 +42,23 @@ class Tool:
     description: str
 
 ##claude写的爬虫版本
-def get_text(url):
+def get_text(url, crawl_logger: Optional[CrawlLogger] = None):
+    """
+    爬取指定 URL 的文本内容
+
+    Args:
+        url: 要爬取的 URL
+        crawl_logger: 可选的日志记录器，如果不提供则使用会话级日志记录器
+
+    Returns:
+        页面文本内容
+    """
+    # 使用提供的 logger 或获取会话级 logger
+    logger = crawl_logger if crawl_logger is not None else get_session_logger()
     llm = base_llm(system_prompt="你是一个优秀的AI助手")
+
     async def _run():
-        async with WebCrawler() as crawler:
+        async with WebCrawler(crawl_logger=logger) as crawler:
             result = await crawler.crawl(url, CrawlOptions(wait_until='networkidle'))
             if result.content:
                 if len(result.content) > 3000:
@@ -80,7 +113,21 @@ def python_interpreter(code,timeout=60, max_memory_mb=500):
         if os.path.exists(temp_file):
             os.unlink(temp_file)
     
-def search_web(query: str, url_count = 5) -> str:
+def search_web(query: str, url_count = 5, crawl_logger: Optional[CrawlLogger] = None) -> str:
+    """
+    搜索网页并爬取内容
+
+    Args:
+        query: 搜索关键词
+        url_count: 要爬取的 URL 数量
+        crawl_logger: 可选的日志记录器，如果不提供则使用会话级日志记录器
+
+    Returns:
+        包含搜索结果和爬取内容的字典
+    """
+    # 使用提供的 logger 或获取会话级 logger
+    logger = crawl_logger if crawl_logger is not None else get_session_logger()
+
     ##博查 API
     url = BOCHA_API_URL
 
@@ -96,7 +143,7 @@ def search_web(query: str, url_count = 5) -> str:
     }
 
     response = requests.request("POST", url, headers=headers, data=payload)
-    
+
     if len(response.json()['data']['webPages']['value'])>0:
         res=dict()
         res['content']=''
@@ -104,7 +151,7 @@ def search_web(query: str, url_count = 5) -> str:
         count = 1
         for item in response.json()['data']['webPages']['value']:
             try:
-                text = get_text(item['url'])
+                text = get_text(item['url'], crawl_logger=logger)
                 if text:
                     res['content']+= "<信息源"+str(count)+">\n"+"网页地址:\n"+item['url']+'\n'+"页面简介:\n"+item['summary']+"\n详细内容:\n"+text+'\n</信息源'+str(count)+">\n\n"
                     res['urls'].append(item['url'])

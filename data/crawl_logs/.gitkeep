@@ -1,0 +1,2 @@
+# This file ensures the crawl_logs directory is tracked by git
+# Log files (*.jsonl, *_summary.json) are generated at runtime

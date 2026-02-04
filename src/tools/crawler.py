@@ -11,6 +11,7 @@ from urllib.parse import urljoin
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 
 from src.tools.extractor import SmartExtractor, ArticleData
+from src.tools.crawl_logger import CrawlLogger, CrawlLogEntry, classify_error, extract_domain
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,7 @@ class WebCrawler:
         headless: bool = True,
         timeout: int = 30000,
         default_wait_until: WaitUntilType = "domcontentloaded",
+        crawl_logger: Optional[CrawlLogger] = None,
     ):
         """
         初始化爬虫
@@ -158,12 +160,14 @@ class WebCrawler:
             headless: 是否无头模式运行
             timeout: 页面加载超时时间（毫秒）
             default_wait_until: 默认页面加载等待策略
+            crawl_logger: 可选的日志记录器，用于记录爬取详情
         """
         self.headless = headless
         self.timeout = timeout
         self.default_wait_until = default_wait_until
         self._browser: Optional[Browser] = None
         self._playwright = None
+        self._crawl_logger = crawl_logger
 
     async def __aenter__(self):
         """异步上下文管理器入口"""
@@ -481,6 +485,7 @@ class WebCrawler:
         self,
         url: str,
         options: Optional[CrawlOptions] = None,
+        retry_count: int = 0,
     ) -> CrawlResult:
         """
         爬取指定 URL
@@ -488,6 +493,7 @@ class WebCrawler:
         Args:
             url: 要爬取的 URL
             options: 爬取选项，如果为 None 则使用默认选项
+            retry_count: 当前重试次数（用于日志记录）
 
         Returns:
             CrawlResult: 爬取结果
@@ -500,6 +506,10 @@ class WebCrawler:
 
         context = None
         page = None
+        start_time = asyncio.get_event_loop().time()
+        content_length = None
+        status_code = None
+
         try:
             # 创建带有反爬虫配置的上下文
             context = await self._create_context(opts)
@@ -507,7 +517,9 @@ class WebCrawler:
             page.set_default_timeout(self.timeout)
 
             # 加载页面
-            await page.goto(url, wait_until=opts.wait_until)
+            response = await page.goto(url, wait_until=opts.wait_until)
+            if response:
+                status_code = response.status
             logger.info(f"Loaded: {url} (wait_until={opts.wait_until})")
 
             # 处理 Cookie 同意弹窗
@@ -551,6 +563,30 @@ class WebCrawler:
                 images = await self._extract_images(page, url)
                 links = await self._extract_links(page, url)
 
+            # 计算内容长度
+            if content:
+                content_length = len(content)
+
+            # 计算响应时间
+            response_time = asyncio.get_event_loop().time() - start_time
+
+            # 记录成功日志
+            if self._crawl_logger:
+                from datetime import datetime
+                log_entry = CrawlLogEntry(
+                    timestamp=datetime.now().isoformat(),
+                    url=url,
+                    success=True,
+                    error_type=None,
+                    error_message=None,
+                    status_code=status_code,
+                    response_time=round(response_time, 3),
+                    content_length=content_length,
+                    retry_count=retry_count,
+                    domain=extract_domain(url),
+                )
+                self._crawl_logger.log(log_entry)
+
             return CrawlResult(
                 url=url,
                 success=True,
@@ -563,6 +599,28 @@ class WebCrawler:
 
         except Exception as e:
             logger.error(f"Failed to crawl {url}: {e}")
+
+            # 计算响应时间
+            response_time = asyncio.get_event_loop().time() - start_time
+
+            # 分类错误并记录日志
+            error_type, error_message = classify_error(e)
+            if self._crawl_logger:
+                from datetime import datetime
+                log_entry = CrawlLogEntry(
+                    timestamp=datetime.now().isoformat(),
+                    url=url,
+                    success=False,
+                    error_type=error_type,
+                    error_message=error_message,
+                    status_code=status_code,
+                    response_time=round(response_time, 3),
+                    content_length=None,
+                    retry_count=retry_count,
+                    domain=extract_domain(url),
+                )
+                self._crawl_logger.log(log_entry)
+
             return CrawlResult(
                 url=url,
                 success=False,
