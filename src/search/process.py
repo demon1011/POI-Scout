@@ -79,7 +79,7 @@ def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_
                     for item in opt_res:
                         step_key = str(item['行动步骤'])  # 统一转换为字符串
                         search_content=searcher.logger.log['process'][step_key]['搜索过程']
-                        for step_plan in eval(searcher.logger.log['plan']):
+                        for step_plan in json.loads(searcher.logger.log['plan']):
                             if str(step_plan['行动步骤']) == step_key:
                                 cur_plan=step_plan
                                 break
@@ -88,7 +88,13 @@ def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_
                             cur_problem=item['当前问题']
                             opt_prompt=refine_prompt(search_content,cur_problem,cur_plan)
                             opt_advice=llm.call_with_messages_R1(opt_prompt,temp=0)
-                            suggestion=eval(opt_advice)['修改建议']
+                            # 清理 markdown 代码块并解析 JSON
+                            opt_advice_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', opt_advice)
+                            if opt_advice_match:
+                                opt_advice_clean = opt_advice_match.group(1)
+                            else:
+                                opt_advice_clean = re.search(r'\{[\s\S]*\}', opt_advice).group()
+                            suggestion=json.loads(opt_advice_clean)['修改建议']
                             item['修改建议']=suggestion
                             print(suggestion)
                             new_prompt=new_step_prompt(searcher.query,cur_plan,str(item))

@@ -1,8 +1,35 @@
 from src.core.prompts import search_plan_prompt,search_opt_plan_prompt,agent_match_prompt
 import json
+import re
 import pytz
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import copy
+
+
+def extract_json_from_response(response: str) -> str:
+    """
+    从 LLM 响应中提取 JSON 内容，清理 markdown 代码块标记
+
+    Args:
+        response: LLM 返回的原始字符串
+
+    Returns:
+        清理后的 JSON 字符串
+    """
+    # 尝试匹配 ```json ... ``` 或 ``` ... ``` 代码块
+    code_block_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+    match = re.search(code_block_pattern, response)
+    if match:
+        return match.group(1).strip()
+
+    # 如果没有代码块标记，尝试直接匹配 JSON 数组
+    json_array_pattern = r'\[[\s\S]*\]'
+    match = re.search(json_array_pattern, response)
+    if match:
+        return match.group(0)
+
+    # 如果都没匹配到，返回原始内容（去除首尾空白）
+    return response.strip()
 
 class search_logger():
     def __init__(self,llm,query):
@@ -139,8 +166,10 @@ class search_agent():
     def self_plan(self,sample_temperature=0):
         prompt=search_plan_prompt(self.query)
         res_plan=self.llm.call_with_messages_V3(prompt,temp=sample_temperature)
-        self.logger.log['plan']=res_plan
-        return eval(res_plan)
+        # 清理 markdown 代码块标记并解析 JSON
+        clean_plan = extract_json_from_response(res_plan)
+        self.logger.log['plan']=clean_plan
+        return json.loads(clean_plan)
     def execution(self,plan):
         for step in plan:
             search_res,feed_list,search_record=self.poi_tool.run(step['搜索请求'],advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
@@ -158,7 +187,7 @@ class search_agent():
         print("start revision!")
         # 统一 opt_steps 的键为字符串
         opt_steps_str = {str(k): v for k, v in opt_steps.items()}
-        for step in eval(self.logger.log['plan']):
+        for step in json.loads(self.logger.log['plan']):
             step_key = str(step["行动步骤"])  # 统一转换为字符串
             if step_key not in opt_steps_str:
                 search_res = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索POI'])
@@ -167,7 +196,7 @@ class search_agent():
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
             else:
                 ###修改plan内容###
-                cur_plan=eval(self.logger.log['plan'])
+                cur_plan=json.loads(self.logger.log['plan'])
                 for plan_step in cur_plan:
                     if str(plan_step['行动步骤']) == step_key:
                         plan_step['行动规划']=opt_steps_str[step_key]['行动规划']
@@ -179,7 +208,7 @@ class search_agent():
                 search_query=opt_steps_str[step_key]['搜索请求']
                 search_res,feed_list,search_record=self.poi_tool.run(search_query,advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
-                self.logger.log['plan']=str(cur_plan)
+                self.logger.log['plan']=json.dumps(cur_plan, ensure_ascii=False)
             step['执行总结']=summary
             step['执行结果']=match_res
             step['搜索过程']=search_record+'\nPOI与用户请求匹配结果:\n'+str([item['POI名称']+",是否匹配:"+item['是否匹配']+",理由:"+item['判断理由'] for item in match_res])
@@ -190,5 +219,7 @@ class search_agent():
     def self_plan_advice(self,advices,sample_temperature=0):
         prompt=search_opt_plan_prompt(self.query,advice=advices)
         res_plan=self.llm.call_with_messages_V3(prompt,temp=sample_temperature)
-        self.logger.log['plan']=res_plan
-        return eval(res_plan)
+        # 清理 markdown 代码块标记并解析 JSON
+        clean_plan = extract_json_from_response(res_plan)
+        self.logger.log['plan']=clean_plan
+        return json.loads(clean_plan)
