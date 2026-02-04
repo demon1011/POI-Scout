@@ -189,12 +189,13 @@ class search_agent():
         opt_steps_str = {str(k): v for k, v in opt_steps.items()}
         for step in json.loads(self.logger.log['plan']):
             step_key = str(step["行动步骤"])  # 统一转换为字符串
-            if step_key not in opt_steps_str:
+            if step_key not in opt_steps_str and step_key in self.logger.log['process']:
+                # 该步骤不需要优化且之前已执行过，直接复用之前的结果
                 search_res = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索POI'])
                 feed_list = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索网页'])
                 search_record = self.logger.log['process'][step_key]['搜索过程']
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
-            else:
+            elif step_key in opt_steps_str:
                 ###修改plan内容###
                 cur_plan=json.loads(self.logger.log['plan'])
                 for plan_step in cur_plan:
@@ -209,6 +210,12 @@ class search_agent():
                 search_res,feed_list,search_record=self.poi_tool.run(search_query,advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
                 self.logger.log['plan']=json.dumps(cur_plan, ensure_ascii=False)
+            else:
+                # 该步骤之前未执行过（初始执行失败），需要重新执行
+                print(f"步骤 {step_key} 之前未执行，正在重新执行...")
+                search_query=step['搜索请求']
+                search_res,feed_list,search_record=self.poi_tool.run(search_query,advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
+                summary,match_res=self.logger.summary_step(search_res,feed_list)
             step['执行总结']=summary
             step['执行结果']=match_res
             step['搜索过程']=search_record+'\nPOI与用户请求匹配结果:\n'+str([item['POI名称']+",是否匹配:"+item['是否匹配']+",理由:"+item['判断理由'] for item in match_res])
