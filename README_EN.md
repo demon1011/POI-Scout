@@ -107,15 +107,6 @@ POI-Scout/
     └── crawl_logs/      # Crawler logs (JSON Lines format)
 ```
 
-### Crawler Logging
-
-The crawler module records detailed information for each crawl in real-time, enabling analysis and optimization:
-
-- **Log files**: `data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS.jsonl`
-- **Summary**: `data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS_summary.json`
-
-Recorded fields include: URL, success/failure status, error type (timeout/network/blocked, etc.), response time, content length, domain statistics, and more.
-
 ## License
 
 MIT License

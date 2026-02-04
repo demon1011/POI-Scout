@@ -107,15 +107,6 @@ POI-Scout/
     └── crawl_logs/      # 爬虫日志（JSON Lines 格式）
 ```
 
-### 爬虫日志
-
-爬虫模块会实时记录每次爬取的详细信息，便于后续分析和优化：
-
-- **日志文件**：`data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS.jsonl`
-- **统计摘要**：`data/crawl_logs/crawl_log_YYYYMMDD_HHMMSS_summary.json`
-
-记录字段包括：URL、成功/失败状态、错误类型（timeout/network/blocked 等）、响应时间、内容长度、域名统计等。
-
 ## License
 
 MIT License
