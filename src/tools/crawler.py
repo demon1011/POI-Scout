@@ -273,6 +273,28 @@ class WebCrawler:
         """)
         logger.debug("Stealth scripts injected")
 
+    async def _wait_for_js_content(self, page: Page, timeout: int = 8000):
+        """
+        等待 JS 渲染完成，确保页面有实际可见内容。
+
+        许多中文网站（携程、去哪儿、小红书等）使用客户端 JS 渲染，
+        domcontentloaded 时 body 还是空的，需要额外等待。
+        """
+        try:
+            # 等待 body 有一定量的可见文本（200+ 字符）
+            await page.wait_for_function(
+                "document.body && document.body.innerText && document.body.innerText.trim().length > 200",
+                timeout=timeout,
+            )
+            logger.debug("JS content rendered (body text > 200 chars)")
+        except Exception:
+            # 如果等待超时，尝试 networkidle 作为备选
+            try:
+                await page.wait_for_load_state("networkidle", timeout=5000)
+                logger.debug("Fell back to networkidle wait")
+            except Exception:
+                logger.debug("JS content wait timed out, proceeding with available content")
+
     async def _simulate_human_behavior(self, page: Page, opts: CrawlOptions):
         """模拟人类行为"""
         delay_min, delay_max = opts.human_delay_range
@@ -564,6 +586,12 @@ class WebCrawler:
                 await page.wait_for_load_state("domcontentloaded", timeout=5000)
             except Exception:
                 pass
+
+            # 等待 JS 渲染完成（解决 fail_js_render 问题）
+            try:
+                await self._wait_for_js_content(page)
+            except Exception as e:
+                logger.debug(f"JS content wait failed (non-fatal): {e}")
 
             # 提取内容（带重试，处理导航导致的 context 销毁）
             article = None

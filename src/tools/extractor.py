@@ -360,6 +360,12 @@ class SmartExtractor:
         author = self._extract_author(soup)
         date = self._extract_date(soup)
 
+        # 保存一份去除脚本/样式后但未去噪的 body 文本，用于最终兜底
+        body_fallback = soup.find("body")
+        fallback_text = None
+        if body_fallback:
+            fallback_text = body_fallback.get_text(separator="\n", strip=True)
+
         # 第三步：移除噪声区域
         self._remove_noise(soup)
 
@@ -368,6 +374,11 @@ class SmartExtractor:
 
         # 第五步：提取内容
         content = self._extract_text(main_content) if main_content else None
+
+        # 第六步：兜底 — 如果智能提取的内容过短，回退到 body 全文
+        if (not content or len(content) <= 100) and fallback_text and len(fallback_text) > 100:
+            content = fallback_text
+
         summary = self._generate_summary(content) if content else None
         images = self._extract_images(main_content or soup)
         links = self._extract_links(main_content or soup)
