@@ -204,7 +204,9 @@ class WebCrawler:
 
     async def _create_context(self, opts: CrawlOptions) -> BrowserContext:
         """创建浏览器上下文，支持反爬虫配置"""
-        context_options = {}
+        context_options = {
+            "ignore_https_errors": True,
+        }
 
         # 设置 User-Agent
         user_agent = self._get_user_agent(opts)
@@ -522,13 +524,22 @@ class WebCrawler:
                 status_code = response.status
             logger.info(f"Loaded: {url} (wait_until={opts.wait_until})")
 
+            # 等待页面稳定（处理重定向/导航）
+            try:
+                await page.wait_for_load_state("load", timeout=10000)
+            except Exception:
+                pass  # 超时没关系，只是尽力等待
+
             # 处理 Cookie 同意弹窗
             if opts.handle_cookie_consent or opts.stealth_mode:
                 await self._handle_cookie_consent(page)
 
             # 模拟人类行为
             if opts.simulate_human or opts.stealth_mode:
-                await self._simulate_human_behavior(page, opts)
+                try:
+                    await self._simulate_human_behavior(page, opts)
+                except Exception as e:
+                    logger.warning(f"Human behavior simulation failed (non-fatal): {e}")
 
             # 等待自定义选择器
             if opts.wait_for_selector:
@@ -543,25 +554,51 @@ class WebCrawler:
 
             # 处理懒加载内容 - 滚动页面
             if opts.scroll_to_load:
-                await self._scroll_page(page, opts.scroll_times, opts.scroll_delay)
+                try:
+                    await self._scroll_page(page, opts.scroll_times, opts.scroll_delay)
+                except Exception as e:
+                    logger.warning(f"Scroll to load failed (non-fatal): {e}")
 
-            # 提取内容
+            # 等待页面在模拟行为后再次稳定
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=5000)
+            except Exception:
+                pass
+
+            # 提取内容（带重试，处理导航导致的 context 销毁）
             article = None
-            if opts.smart_extract:
-                # 使用智能提取器
-                html = await page.content()
-                extractor = SmartExtractor(base_url=url)
-                article = extractor.extract(html)
-                title = article.title
-                content = article.content
-                images = article.images
-                links = article.links
-            else:
-                # 使用基础提取
-                title = await self._extract_title(page)
-                content = await self._extract_content(page)
-                images = await self._extract_images(page, url)
-                links = await self._extract_links(page, url)
+            extract_attempts = 2
+            for attempt in range(extract_attempts):
+                try:
+                    if opts.smart_extract:
+                        # 使用智能提取器
+                        html = await page.content()
+                        extractor = SmartExtractor(base_url=page.url)
+                        article = extractor.extract(html)
+                        title = article.title
+                        content = article.content
+                        images = article.images
+                        links = article.links
+                    else:
+                        # 使用基础提取
+                        title = await self._extract_title(page)
+                        content = await self._extract_content(page)
+                        images = await self._extract_images(page, page.url)
+                        links = await self._extract_links(page, page.url)
+                    break  # 提取成功，跳出重试循环
+                except Exception as extract_err:
+                    err_msg = str(extract_err).lower()
+                    if attempt < extract_attempts - 1 and (
+                        "context" in err_msg or "navigating" in err_msg or "destroyed" in err_msg
+                    ):
+                        logger.warning(f"Content extraction failed (attempt {attempt + 1}), retrying after wait: {extract_err}")
+                        await asyncio.sleep(2)
+                        try:
+                            await page.wait_for_load_state("load", timeout=10000)
+                        except Exception:
+                            pass
+                    else:
+                        raise
 
             # 计算内容长度
             if content:
