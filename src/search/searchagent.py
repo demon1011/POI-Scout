@@ -103,14 +103,16 @@ class search_logger():
                     flag=1
                     break
                 elif poi_info['POI名称'].lower() in existed_poi['POI名称'].lower():
-                    ###如果新poi中包含该已有poi，则用新poi代替已有poi，然后放到匹配验证池子里重新验证
+                    ###如果新poi中包含该已有poi，则把已有poi的信息合并到新poi，移除已有poi，重新评估新poi
                     existed_related_pois+=1
-                    existed_poi['POI名称']=poi_info['POI名称']
-                    existed_poi['POI简介']=poi_info['POI简介']
-                    existed_poi['好评内容'].extend(poi_info['好评内容'])
-                    existed_poi['差评内容'].extend(poi_info['差评内容'])
+                    # 把 existed_poi 的评论合并到 poi_info
+                    poi_info['好评内容'].extend(existed_poi['好评内容'])
+                    poi_info['差评内容'].extend(existed_poi['差评内容'])
                     new_comments=new_comments+len(poi_info['好评内容'])+len(poi_info['差评内容'])
-                    pois_to_evaluate.append(existed_poi)
+                    # 从 final_res 中移除 existed_poi
+                    self.log['final_res'].remove(existed_poi)
+                    # 评估 poi_info 而不是 existed_poi
+                    pois_to_evaluate.append(poi_info)
                     flag=1
                     break
             if flag == 0:
