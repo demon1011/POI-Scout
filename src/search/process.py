@@ -123,4 +123,6 @@ def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_
                     traceback.print_exc()
             log=summary_log(searcher)
             total_log[j+1]=log
-    return log,log_ref
+    # 返回详细搜索日志（单独存储，不放入 res_log 避免优化时内容过长）
+    search_logs = searcher.logger.log.get('search_logs', {})
+    return log, log_ref, search_logs

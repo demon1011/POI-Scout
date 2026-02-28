@@ -1,5 +1,20 @@
 ###压缩网页内容
-def compress_web(context):
+def compress_web(context, max_input_len=120000, max_output_len=50000):
+    """
+    生成网页内容压缩的 prompt
+
+    Args:
+        context: 网页内容
+        max_input_len: 输入内容最大长度，超过则截断（默认12000字符）
+        max_output_len: 压缩结果最大长度，超过则截断（默认50000字符）
+
+    Returns:
+        (prompt, max_output_len) 元组
+    """
+    # 如果输入超过 max_input_len，截断保留前面的内容
+    if len(context) > max_input_len:
+        context = context[:max_input_len] + "\n...(内容过长已截断)"
+
     prompt='''请根据用户的任务请求对以下网页搜索内容进行摘抄。
 【任务请求】
 搜索与旅游相关的POI名称，介绍以及评价等所有相关内容。
@@ -7,12 +22,12 @@ def compress_web(context):
 %s
 
 ------------------------
-现在请基于“搜索与旅游相关的POI名称，介绍以及评价等所有相关内容。”的请求，对以上网页内容进行摘抄和压缩。
+现在请基于"搜索与旅游相关的POI名称，介绍以及评价等所有相关内容。"的请求，对以上网页内容进行摘抄和压缩。
 注意：
 -输出结果中的内容需要与【任务请求】相关，去掉无关的信息和内容；
 -请在输出结果中摘抄【网页内容】的原文，不要对【网页内容】进行任何信息或内容的补充;
 '''%(context)
-    return prompt
+    return prompt, max_output_len
 
 def search_plan_prompt(user_query):
     prompt='''你是一个旅行规划agent，你需要根据用户请求设计一个搜索计划，使用搜索工具来搜索多个候选POI，以供后续筛选匹配用户需求。

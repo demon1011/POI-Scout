@@ -64,25 +64,32 @@ class POISelector:
         else:
             print(message)
     
-    def build_tree(self, pois: list[POI], user_request: str, auto_save: bool = True) -> DecisionTreeData:
+    def build_tree(self, pois: list[POI], user_request: str, auto_save: bool = True, search_log: dict = None) -> DecisionTreeData:
         """
         构建新的决策树
-        
+
         Args:
             pois: POI列表
             user_request: 用户请求
             auto_save: 是否自动保存
-            
+            search_log: 搜索日志（可选，会保存到决策树同目录）
+
         Returns:
             构建的决策树数据
         """
         self.current_tree = self.builder.build(pois, user_request)
-        
+
         if auto_save:
             self.current_filepath = self.storage.save(self.current_tree)
+            # 同时保存搜索日志
+            if search_log and self.current_filepath:
+                log_filepath = self.current_filepath.replace('.json', '_search_log.json')
+                with open(log_filepath, 'w', encoding='utf-8') as f:
+                    json.dump(search_log, f, ensure_ascii=False, indent=2)
+                print(f"搜索日志已保存: {log_filepath}")
         else:
             self.current_filepath = None
-        
+
         return self.current_tree
     
     def load_tree(self, filepath: str) -> DecisionTreeData:
@@ -241,7 +248,7 @@ class POISelector:
                     self._display_message("需求不能为空", "error")
                     continue
                 self._display_message("已接收需求,搜索候选POI中(可能需要花费较长时间)...","info")
-                log,log_ref=search_process(user_request,on_policy_opt=online_opt,maximum_opt_iterations=opt_iterations,
+                log, log_ref, search_logs = search_process(user_request,on_policy_opt=online_opt,maximum_opt_iterations=opt_iterations,
                                            use_advice=use_skill)
                 
                 self._display_message("总结搜索经验中,后续搜索中可能会用到这些经验...","info")
@@ -275,7 +282,9 @@ class POISelector:
                 pois=list(set(POI_list))
                 
                 ###build决策树###
-                self.build_tree(pois, user_request)
+                # 合并 log 和 search_logs 用于保存（search_logs 单独存储避免优化时内容过长）
+                full_search_log = {**log, '搜索详细日志': search_logs}
+                self.build_tree(pois, user_request, search_log=full_search_log)
                 self.run_interactive(allow_restart=True)
             
             elif choice == "2":

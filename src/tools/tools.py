@@ -62,14 +62,17 @@ def get_text(url, crawl_logger: Optional[CrawlLogger] = None):
             result = await crawler.crawl(url, CrawlOptions(wait_until='networkidle'))
             if result.content:
                 if len(result.content) > 3000:
-                    prompt = compress_web(result.content)
+                    prompt, max_output_len = compress_web(result.content)
                     for i in range(3):
                         try:
                             res = llm.call_with_messages_small(prompt)
+                            # 如果压缩结果超过 max_output_len，截断
+                            if len(res) > max_output_len:
+                                res = res[:max_output_len]
                             if len(res)<len(result.content):
                                 return res
                             else:
-                                return result.content
+                                return result.content[:max_output_len] if len(result.content) > max_output_len else result.content
                         except Exception as e:
                             print(f"LLM call failed: {e}, retrying {i}!")
                             time.sleep(5)
@@ -142,14 +145,27 @@ def search_web(query: str, url_count = 5, crawl_logger: Optional[CrawlLogger] = 
       'Content-Type': 'application/json'
     }
 
-    response = requests.request("POST", url, headers=headers, data=payload)
+    try:
+        response = requests.request("POST", url, headers=headers, data=payload, timeout=30)
+        response.raise_for_status()  # 检查 HTTP 状态码
+        response_data = response.json()
+    except requests.exceptions.RequestException as e:
+        return {'content': f"搜索API请求失败: {str(e)}", 'urls': []}
+    except json.JSONDecodeError as e:
+        return {'content': f"搜索API返回格式错误: {str(e)}", 'urls': []}
 
-    if len(response.json()['data']['webPages']['value'])>0:
+    # 检查返回数据结构
+    try:
+        web_pages = response_data.get('data', {}).get('webPages', {}).get('value', [])
+    except (KeyError, TypeError, AttributeError):
+        return {'content': f"搜索API返回数据结构异常: {response_data}", 'urls': []}
+
+    if len(web_pages) > 0:
         res=dict()
         res['content']=''
         res['urls']=list()
         count = 1
-        for item in response.json()['data']['webPages']['value']:
+        for item in web_pages:
             try:
                 text = get_text(item['url'], crawl_logger=logger)
                 if text:
@@ -164,7 +180,9 @@ def search_web(query: str, url_count = 5, crawl_logger: Optional[CrawlLogger] = 
                 res['urls'].append(item['url'])
             count+=1
     else:
+        res = dict()
         res['content']="搜索接口返回信息为空,建议重新搜索。"
+        res['urls']=[]
     return res
 def ask_gpt(query):
     llm = base_llm(system_prompt="请根据你的知识范围，回答用户询问的问题，对于你不确定的知识内容，请拒绝回答或提示用户可能的错误风险。以下用户提出的问题:")
