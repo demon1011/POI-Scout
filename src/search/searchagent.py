@@ -39,6 +39,7 @@ class search_logger():
         self.log['process']=dict()
         self.log['final_res']=list()
         self.log['final_feeds']=list()
+        self.log['search_logs']=dict()  # 存储每个步骤的搜索日志
         self.llm=llm
     def _clean_keys(self,poi_list, valid_keys=['POI名称', 'POI简介', '好评内容', '差评内容']):
         cleaned_list = []
@@ -173,23 +174,32 @@ class search_agent():
         self.logger.log['plan']=clean_plan
         return json.loads(clean_plan)
     def execution(self,plan):
-        # 第一阶段：并行执行所有搜索任务
-        search_results = {}  # step_index -> (search_res, feed_list, search_record)
+        # 第一阶段：并行执行所有搜索任务（不打印中间结果）
+        search_results = {}  # step_index -> (search_res, feed_list, search_record, run_log)
         advice = "-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。"
 
+        print(f"开始并行搜索 {len(plan)} 个步骤...")
+
         def run_search(step_index, step):
-            search_res, feed_list, search_record = self.poi_tool.run(step['搜索请求'], advice=advice)
-            return step_index, search_res, feed_list, search_record
+            search_res, feed_list, search_record, run_log = self.poi_tool.run(
+                step['搜索请求'], advice=advice, verbose=False
+            )
+            return step_index, search_res, feed_list, search_record, run_log
 
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {executor.submit(run_search, i, step): i for i, step in enumerate(plan)}
             for future in as_completed(futures):
-                step_index, search_res, feed_list, search_record = future.result()
-                search_results[step_index] = (search_res, feed_list, search_record)
+                step_index, search_res, feed_list, search_record, run_log = future.result()
+                search_results[step_index] = (search_res, feed_list, search_record, run_log)
+                print(f"  ✓ 步骤 {step_index + 1} 搜索完成，发现 {len(search_res)} 个候选POI")
+
+        print(f"\n所有搜索完成，开始汇总结果...")
 
         # 第二阶段：按顺序汇总结果（保证 summary_step 的串行执行）
         for i, step in enumerate(plan):
-            search_res, feed_list, search_record = search_results[i]
+            search_res, feed_list, search_record, run_log = search_results[i]
+            # 保存搜索日志
+            self.logger.log['search_logs'][str(step['行动步骤'])] = run_log
             summary, match_res = self.logger.summary_step(search_res, feed_list)
             step['执行总结'] = summary
             step['执行结果'] = match_res
@@ -197,23 +207,30 @@ class search_agent():
             step['本步骤搜索网页'] = feed_list
             step['本步骤搜索POI'] = search_res
             self.logger.add_searchlog(step)
+            # 打印汇总结果
+            print(f"  步骤 {i + 1}: {summary}")
+
+        print(f"\n初始搜索完成，共找到 {len(self.logger.log['final_res'])} 个相关POI")
         return self.logger.log['final_res']
     def revise_execution(self,opt_steps):
         self.logger.log['final_res']=list()
         self.logger.log['final_feeds']=list()
-        print("start revision!")
+        print("开始优化执行...")
+        advice = "-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。"
         # 统一 opt_steps 的键为字符串
         opt_steps_str = {str(k): v for k, v in opt_steps.items()}
         for step in json.loads(self.logger.log['plan']):
             step_key = str(step["行动步骤"])  # 统一转换为字符串
             if step_key not in opt_steps_str and step_key in self.logger.log['process']:
                 # 该步骤不需要优化且之前已执行过，复用缓存结果
+                print(f"  步骤 {step_key}: 复用缓存结果")
                 search_res = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索POI'])
                 feed_list = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索网页'])
                 search_record = self.logger.log['process'][step_key]['搜索过程']
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
             elif step_key in opt_steps_str:
                 ###修改plan内容###
+                print(f"  步骤 {step_key}: 执行优化搜索...")
                 cur_plan=json.loads(self.logger.log['plan'])
                 for plan_step in cur_plan:
                     if str(plan_step['行动步骤']) == step_key:
@@ -224,21 +241,28 @@ class search_agent():
                         step['搜索请求']=opt_steps_str[step_key]['搜索请求']
                         break
                 search_query=opt_steps_str[step_key]['搜索请求']
-                search_res,feed_list,search_record=self.poi_tool.run(search_query,advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
+                search_res,feed_list,search_record,run_log=self.poi_tool.run(search_query,advice=advice,verbose=False)
+                # 保存搜索日志
+                self.logger.log['search_logs'][step_key] = run_log
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
                 self.logger.log['plan']=json.dumps(cur_plan, ensure_ascii=False)
+                print(f"    ✓ 完成，发现 {len(search_res)} 个候选POI")
             else:
                 # 该步骤之前未执行过（初始执行失败），重新执行
-                print(f"步骤 {step_key} 之前未执行，正在执行...")
+                print(f"  步骤 {step_key}: 之前未执行，正在执行...")
                 search_query=step['搜索请求']
-                search_res,feed_list,search_record=self.poi_tool.run(search_query,advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
+                search_res,feed_list,search_record,run_log=self.poi_tool.run(search_query,advice=advice,verbose=False)
+                # 保存搜索日志
+                self.logger.log['search_logs'][step_key] = run_log
                 summary,match_res=self.logger.summary_step(search_res,feed_list)
+                print(f"    ✓ 完成，发现 {len(search_res)} 个候选POI")
             step['执行总结']=summary
             step['执行结果']=match_res
             step['搜索过程']=search_record+'\nPOI与用户请求匹配结果:\n'+str([item['POI名称']+",是否匹配:"+item['是否匹配']+",理由:"+item['判断理由'] for item in match_res])
             step['本步骤搜索网页']=feed_list
             step['本步骤搜索POI']=search_res
-            self.logger.add_searchlog(step)  
+            self.logger.add_searchlog(step)
+        print(f"\n优化执行完成，共找到 {len(self.logger.log['final_res'])} 个相关POI")
         return self.logger.log['final_res']
     def self_plan_advice(self,advices,sample_temperature=0):
         prompt=search_opt_plan_prompt(self.query,advice=advices)

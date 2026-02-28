@@ -101,49 +101,59 @@ Final Answer: [你的答案]
     def run(self, question: str, advice: str = "",verbose: bool = True) -> str:
         """
         运行 Agent
-        
+
         Args:
             question: 用户问题
             verbose: 是否打印中间过程
-            
+
         Returns:
-            最终答案
+            最终答案, feed_list, search_record, run_log (当verbose=False时)
         """
         feed_list=[]
+        run_log = []  # 收集运行日志
         system_prompt = self._build_system_prompt()
         conversation_history = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"用户请求: {question}\n行动建议:{advice}"}
         ]
-        
+
         for iteration in range(self.max_iterations):
+            iter_header = f"\n{'='*50}\n迭代 {iteration + 1}/{self.max_iterations}\n{'='*50}"
             if verbose:
-                print(f"\n{'='*50}")
-                print(f"迭代 {iteration + 1}/{self.max_iterations}")
-                print(f"{'='*50}")
-            
+                print(iter_header)
+            else:
+                run_log.append(iter_header)
+
             # 调用 LLM
             response = self._call_llm(conversation_history)
             ##幻觉消除，大模型自己输出外部response
             if "Observation" in response:
                 response = response.split("Observation")[0]
+            llm_output = f"\nLLM 输出:\n{response}"
             if verbose:
-                print(f"\nLLM 输出:\n{response}")
-            
+                print(llm_output)
+            else:
+                run_log.append(llm_output)
+
             # 解析输出
             parsed = self._parse_llm_output(response)
              # 检查是否得到最终答案
             if 'final_answer' in parsed and 'action' not in parsed:
+                final_msg = f"\n✓ 找到最终答案！"
                 if verbose:
-                    print(f"\n✓ 找到最终答案！")
+                    print(final_msg)
+                else:
+                    run_log.append(final_msg)
                 res,search_record=self._final_summary(conversation_history)
-#                 return parsed['final_answer'] 
-                return res,feed_list,search_record
-            
+                return res,feed_list,search_record,run_log
+
             # 检查是否有有效的 action
             if 'action' not in parsed or 'action_input' not in parsed:
+                retry_msg = "\n✗ 无法解析有效的 Action，尝试重新生成..."
                 if verbose:
-                    print("\n✗ 无法解析有效的 Action，尝试重新生成...")
+                    print(retry_msg)
+                else:
+                    run_log.append(retry_msg)
                 conversation_history.append({
                     "role": "assistant",
                     "content": response
@@ -153,22 +163,27 @@ Final Answer: [你的答案]
                     "content": "请按照正确的格式输出 Thought, Action 和 Action Input"
                 })
                 continue
-            
+
             # 执行工具
             action = parsed['action']
             action_input = parsed['action_input']
-            
+
+            tool_msg = f"\n执行工具: {action}\n输入参数: {action_input}"
             if verbose:
-                print(f"\n执行工具: {action}")
-                print(f"输入参数: {action_input}")
+                print(tool_msg)
+            else:
+                run_log.append(tool_msg)
             try:
                 observation_res = self._execute_tool(action, action_input)
                 observation = eval(observation_res)['content']
                 observation += f"\n剩余可用迭代次数:{self.max_iterations-iteration-1}"
                 feed_list.extend(eval(observation_res)['urls'])
 
+                obs_msg = f"观察结果: {observation}"
                 if verbose:
-                    print(f"观察结果: {observation}")
+                    print(obs_msg)
+                else:
+                    run_log.append(obs_msg)
 
                 # 更新对话历史
                 conversation_history.append({
@@ -181,8 +196,11 @@ Final Answer: [你的答案]
                 })
             except:
                 observation ="工具执行错误。"+ f"\n剩余可用迭代次数:{self.max_iterations-iteration-1}"
+                obs_msg = f"观察结果: {observation}"
                 if verbose:
-                    print(f"观察结果: {observation}")
+                    print(obs_msg)
+                else:
+                    run_log.append(obs_msg)
 
                 # 更新对话历史
                 conversation_history.append({
@@ -193,9 +211,13 @@ Final Answer: [你的答案]
                     "role": "user",
                     "content": f"Observation: {observation}"
                 })
-        print(f"抱歉，在 {self.max_iterations} 次迭代内未能找到答案。")
+        timeout_msg = f"抱歉，在 {self.max_iterations} 次迭代内未能找到答案。"
+        if verbose:
+            print(timeout_msg)
+        else:
+            run_log.append(timeout_msg)
         res,search_record=self._final_summary(conversation_history)
-        return res,feed_list,search_record
+        return res,feed_list,search_record,run_log
     def _final_summary(self,messages):
         content= "\n<用户请求>\n"+messages[1]['content']+"\n<\用户请求>\n"
         if len(messages)>2:
