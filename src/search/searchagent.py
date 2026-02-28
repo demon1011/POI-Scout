@@ -173,14 +173,29 @@ class search_agent():
         self.logger.log['plan']=clean_plan
         return json.loads(clean_plan)
     def execution(self,plan):
-        for step in plan:
-            search_res,feed_list,search_record=self.poi_tool.run(step['搜索请求'],advice="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。")
-            summary,match_res=self.logger.summary_step(search_res,feed_list)
-            step['执行总结']=summary
-            step['执行结果']=match_res
-            step['搜索过程']=search_record+'\nPOI与用户请求匹配结果:\n'+str([item['POI名称']+",是否匹配:"+item['是否匹配'] for item in match_res])
-            step['本步骤搜索网页']=feed_list
-            step['本步骤搜索POI']=search_res
+        # 第一阶段：并行执行所有搜索任务
+        search_results = {}  # step_index -> (search_res, feed_list, search_record)
+        advice = "-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。"
+
+        def run_search(step_index, step):
+            search_res, feed_list, search_record = self.poi_tool.run(step['搜索请求'], advice=advice)
+            return step_index, search_res, feed_list, search_record
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(run_search, i, step): i for i, step in enumerate(plan)}
+            for future in as_completed(futures):
+                step_index, search_res, feed_list, search_record = future.result()
+                search_results[step_index] = (search_res, feed_list, search_record)
+
+        # 第二阶段：按顺序汇总结果（保证 summary_step 的串行执行）
+        for i, step in enumerate(plan):
+            search_res, feed_list, search_record = search_results[i]
+            summary, match_res = self.logger.summary_step(search_res, feed_list)
+            step['执行总结'] = summary
+            step['执行结果'] = match_res
+            step['搜索过程'] = search_record + '\nPOI与用户请求匹配结果:\n' + str([item['POI名称']+",是否匹配:"+item['是否匹配'] for item in match_res])
+            step['本步骤搜索网页'] = feed_list
+            step['本步骤搜索POI'] = search_res
             self.logger.add_searchlog(step)
         return self.logger.log['final_res']
     def revise_execution(self,opt_steps):
