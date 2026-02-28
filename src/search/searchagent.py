@@ -128,7 +128,7 @@ class search_logger():
                     poi_info = future_to_poi[future]
                     try:
                         match = future.result()
-                        poi_info['是否匹配'] = match['可能匹配']
+                        poi_info['是否匹配'] = match['是否匹配']
                         poi_info['判断理由'] = match['判断理由']
                         if poi_info['是否匹配'] == "是":
                             poi_info['好评内容']=list(set(poi_info['好评内容']))
@@ -158,7 +158,7 @@ class search_logger():
             match_res=self.llm.call_with_messages_small(prompt,temp=0)
             return json.loads(match_res)
         except:
-            return {"可能匹配":"不确定","判断理由":"调用大模型时出错,没有给出可用答案"}
+            return {"是否匹配":"不确定","判断理由":"调用大模型时出错,没有给出可用答案"}
 
 class search_agent():
     def __init__(self,poi_search,base_llm,query):

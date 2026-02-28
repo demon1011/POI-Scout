@@ -13,10 +13,13 @@ class base_llm():
         self.system_prompt = system_prompt
         self.api_key = SILICONFLOW_API_KEY
         self.base_url = SILICONFLOW_API_BASE
-    def call_with_messages_R1(self, prompt_info, temp=0.1):
-        res = self.call_with_messages_V3(prompt_info=prompt_info, temp=temp, model_name="Pro/deepseek-ai/DeepSeek-R1")
+
+    def call_with_messages_R1(self, prompt_info, temp=0.1, max_tokens=8192):
+        res = self.call_with_messages_V3(prompt_info=prompt_info, temp=temp,
+                                         model_name="Pro/deepseek-ai/DeepSeek-R1", max_tokens=max_tokens)
         return res
-    def call_with_messages_V3(self,prompt_info,temp=0.1,model_name="Pro/deepseek-ai/DeepSeek-V3.2"):
+
+    def call_with_messages_V3(self, prompt_info, temp=0.1, model_name="Pro/deepseek-ai/DeepSeek-V3.2", max_tokens=8192):
         #SiliconFlow-API
         prompt=self.system_prompt+'\n'+prompt_info
         client = OpenAI(
@@ -32,10 +35,10 @@ class base_llm():
                         {
                             "role": "user",
                             "content": prompt,
-                            "max_tokens":4096,
                         }
                     ],
                     temperature=temp,
+                    max_tokens=max_tokens,
                 )
                 response=completion.choices[0].message.content
                 result=response.split('</think>')[-1].strip() if response else ""
@@ -51,22 +54,23 @@ class base_llm():
                 print(f"warning: API call failed ({attempt+1}/5): {e}")
         print("error: failed to generate content after 5 trials!")
         return -1
-    def call_with_messages_small(self,prompt_info,temp=0,model_name="Qwen/Qwen3-8B"):
-        prompt=self.system_prompt+'\n'+prompt_info     
+
+    def call_with_messages_small(self, prompt_info, temp=0, model_name="Qwen/Qwen3-8B", max_tokens=4096):
+        prompt=self.system_prompt+'\n'+prompt_info
         client = OpenAI(
-        api_key=self.api_key,
-        base_url=self.base_url
-    )
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
         completion = client.chat.completions.create(
             model=model_name,
             messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {
-                "role": "user",
-                "content": prompt,
-                "max_tokens":8192,
-            }
-        ],
+                {"role": "system", "content": "You are a helpful assistant."},
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
             temperature=temp,
-            )
-        return completion.choices[0].message.content 
+            max_tokens=max_tokens,
+        )
+        return completion.choices[0].message.content

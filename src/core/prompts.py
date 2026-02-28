@@ -112,9 +112,8 @@ def poi_parse_prompt(content):
     return prompt
 
 def agent_match_prompt(user_query,poi_info):
-    prompt='''你是一个旅行助手agent,请根据用户请求，和poi信息，判断该poi是否可能与用户请求相匹配。注意:
--为了提高筛选结果的召回率，只要有可能匹配用户需求的poi都应该判断为"是"，完全不匹配的poi或内容才应该被判断为"否";
-    
+    prompt='''你是一个旅行助手agent,请根据用户请求和poi信息，判断该poi是否与用户请求相匹配。
+
 【用户请求】
 %s
 【poi信息】
@@ -123,9 +122,9 @@ def agent_match_prompt(user_query,poi_info):
 ------------------------
 判断结果请按照以下格式给出，输出结果中不要包含其他内容。
 {
-"可能匹配":"是/否"，
+"是否匹配":"是/否"，
 "判断理由":"xxxxxx"
-}   
+}
 '''%(user_query,poi_info)
     return prompt
 def troubleshoot_prompt(user_query,cur_log,criteria,max_steps=2):
