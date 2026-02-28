@@ -219,49 +219,81 @@ class search_agent():
         advice = "-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；3.对每个POI都有尽量多的多方面评价，既有好评又有差评。"
         # 统一 opt_steps 的键为字符串
         opt_steps_str = {str(k): v for k, v in opt_steps.items()}
-        for step in json.loads(self.logger.log['plan']):
-            step_key = str(step["行动步骤"])  # 统一转换为字符串
+        plan_steps = json.loads(self.logger.log['plan'])
+
+        # 第一阶段：分类步骤并更新 plan
+        steps_to_search = []  # 需要搜索的步骤 (step_key, search_query, case_type)
+        cached_results = {}   # 缓存结果 step_key -> (search_res, feed_list, search_record)
+
+        for step in plan_steps:
+            step_key = str(step["行动步骤"])
             if step_key not in opt_steps_str and step_key in self.logger.log['process']:
-                # 该步骤不需要优化且之前已执行过，复用缓存结果
+                # Case 1: 复用缓存
                 print(f"  步骤 {step_key}: 复用缓存结果")
-                search_res = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索POI'])
-                feed_list = copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索网页'])
-                search_record = self.logger.log['process'][step_key]['搜索过程']
-                summary,match_res=self.logger.summary_step(search_res,feed_list)
+                cached_results[step_key] = (
+                    copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索POI']),
+                    copy.deepcopy(self.logger.log['process'][step_key]['本步骤搜索网页']),
+                    self.logger.log['process'][step_key]['搜索过程']
+                )
             elif step_key in opt_steps_str:
-                ###修改plan内容###
-                print(f"  步骤 {step_key}: 执行优化搜索...")
-                cur_plan=json.loads(self.logger.log['plan'])
+                # Case 2: 需要优化搜索，先更新 plan
+                cur_plan = json.loads(self.logger.log['plan'])
                 for plan_step in cur_plan:
                     if str(plan_step['行动步骤']) == step_key:
-                        plan_step['行动规划']=opt_steps_str[step_key]['行动规划']
-                        plan_step['搜索请求']=opt_steps_str[step_key]['搜索请求']
-                        #修改process
-                        step['行动规划']=opt_steps_str[step_key]['行动规划']
-                        step['搜索请求']=opt_steps_str[step_key]['搜索请求']
+                        plan_step['行动规划'] = opt_steps_str[step_key]['行动规划']
+                        plan_step['搜索请求'] = opt_steps_str[step_key]['搜索请求']
+                        step['行动规划'] = opt_steps_str[step_key]['行动规划']
+                        step['搜索请求'] = opt_steps_str[step_key]['搜索请求']
                         break
-                search_query=opt_steps_str[step_key]['搜索请求']
-                search_res,feed_list,search_record,run_log=self.poi_tool.run(search_query,advice=advice,verbose=False)
-                # 保存搜索日志
-                self.logger.log['search_logs'][step_key] = run_log
-                summary,match_res=self.logger.summary_step(search_res,feed_list)
-                self.logger.log['plan']=json.dumps(cur_plan, ensure_ascii=False)
-                print(f"    ✓ 完成，发现 {len(search_res)} 个候选POI")
+                self.logger.log['plan'] = json.dumps(cur_plan, ensure_ascii=False)
+                steps_to_search.append((step_key, opt_steps_str[step_key]['搜索请求'], 'optimize'))
             else:
-                # 该步骤之前未执行过（初始执行失败），重新执行
-                print(f"  步骤 {step_key}: 之前未执行，正在执行...")
-                search_query=step['搜索请求']
-                search_res,feed_list,search_record,run_log=self.poi_tool.run(search_query,advice=advice,verbose=False)
-                # 保存搜索日志
+                # Case 3: 之前未执行，需要执行
+                steps_to_search.append((step_key, step['搜索请求'], 'new'))
+
+        # 第二阶段：并行执行需要搜索的步骤
+        search_results = {}  # step_key -> (search_res, feed_list, search_record, run_log)
+        if steps_to_search:
+            print(f"\n并行搜索 {len(steps_to_search)} 个步骤...")
+
+            def run_search(step_key, search_query, case_type):
+                search_res, feed_list, search_record, run_log = self.poi_tool.run(
+                    search_query, advice=advice, verbose=False
+                )
+                return step_key, search_res, feed_list, search_record, run_log, case_type
+
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {
+                    executor.submit(run_search, step_key, query, case_type): step_key
+                    for step_key, query, case_type in steps_to_search
+                }
+                for future in as_completed(futures):
+                    step_key, search_res, feed_list, search_record, run_log, case_type = future.result()
+                    search_results[step_key] = (search_res, feed_list, search_record, run_log)
+                    case_desc = "优化搜索" if case_type == 'optimize' else "新执行"
+                    print(f"  ✓ 步骤 {step_key} ({case_desc}) 完成，发现 {len(search_res)} 个候选POI")
+
+        # 第三阶段：按顺序串行汇总结果
+        print(f"\n汇总结果...")
+        for step in plan_steps:
+            step_key = str(step["行动步骤"])
+            if step_key in cached_results:
+                # Case 1: 使用缓存
+                search_res, feed_list, search_record = cached_results[step_key]
+            else:
+                # Case 2/3: 使用搜索结果
+                search_res, feed_list, search_record, run_log = search_results[step_key]
                 self.logger.log['search_logs'][step_key] = run_log
-                summary,match_res=self.logger.summary_step(search_res,feed_list)
-                print(f"    ✓ 完成，发现 {len(search_res)} 个候选POI")
-            step['执行总结']=summary
-            step['执行结果']=match_res
-            step['搜索过程']=search_record+'\nPOI与用户请求匹配结果:\n'+str([item['POI名称']+",是否匹配:"+item['是否匹配']+",理由:"+item['判断理由'] for item in match_res])
-            step['本步骤搜索网页']=feed_list
-            step['本步骤搜索POI']=search_res
+
+            summary, match_res = self.logger.summary_step(search_res, feed_list)
+            step['执行总结'] = summary
+            step['执行结果'] = match_res
+            step['搜索过程'] = search_record + '\nPOI与用户请求匹配结果:\n' + str([item['POI名称']+",是否匹配:"+item['是否匹配']+",理由:"+item['判断理由'] for item in match_res])
+            step['本步骤搜索网页'] = feed_list
+            step['本步骤搜索POI'] = search_res
             self.logger.add_searchlog(step)
+            print(f"  步骤 {step_key}: {summary}")
+
         print(f"\n优化执行完成，共找到 {len(self.logger.log['final_res'])} 个相关POI")
         return self.logger.log['final_res']
     def self_plan_advice(self,advices,sample_temperature=0):

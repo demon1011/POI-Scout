@@ -128,11 +128,11 @@ def agent_match_prompt(user_query,poi_info):
 }   
 '''%(user_query,poi_info)
     return prompt
-def troubleshoot_prompt(user_query,cur_log,criteria):
+def troubleshoot_prompt(user_query,cur_log,criteria,max_steps=2):
     prompt='''你是一个旅行计划规划专家，现在有一个使用社交平台工具搜索候选POI的搜索计划和执行结果。请你根据搜索候选POI的评判标准，选出当前执行计划中最值得改进的步骤。注意:
 -请基于评判标准和执行结果，通过逻辑推理得出最需要改进的步骤，并且给出当前的问题；
--按重要性，请选择最多1个步骤及其问题；
-    
+-按重要性，请选择最多%d个步骤及其问题；
+
 【用户请求】
 %s
 【评判标准】
@@ -145,10 +145,10 @@ def troubleshoot_prompt(user_query,cur_log,criteria):
 "行动步骤":"1/2/..."(搜索计划中需要改进的步骤),
 "当前问题":"xxxx"(根据评判标准，该步骤当前需要改进的最大问题是什么)
 }
-...(最多1条)
+...(最多%d条)
 ]
-    
-    '''%(user_query,criteria,cur_log)
+
+    '''%(max_steps,user_query,criteria,cur_log,max_steps)
     return prompt
 
 def refine_prompt(search_content,problem,cur_step_plan):

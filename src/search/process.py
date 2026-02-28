@@ -30,7 +30,7 @@ def summary_log(agent):
     res_log['任务总结']="本次任务共执行%d次,共搜索到%d个候选POI,以及%d个与候选POI相关评论。"%(step_count,total_pois,total_comments)
     return res_log
 
-def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_advice = False):
+def search_process(topic, on_policy_opt=True, maximum_opt_iterations=5, steps_per_iteration=2, use_advice=False):
     llm = base_llm(system_prompt="")
     executor = Search_ReActAgent(llm_client=llm, tools=tools)
     total_log=dict()
@@ -70,7 +70,7 @@ def search_process(topic,on_policy_opt = True, maximum_opt_iterations = 10, use_
                     print(f"start optimization trial of {j+1},retry {retry}")
                     new_steps=dict()
                     crit="-最终将按照以下标准判断候选POI搜索结果的质量：1.搜索出来的尽量多的候选POI；2.每个候选POI都必须与用户的请求相关；"
-                    troubleshoot=troubleshoot_prompt(topic,str(log),crit)
+                    troubleshoot=troubleshoot_prompt(topic,str(log),crit,max_steps=steps_per_iteration)
                     troubleshoot_res=llm.call_with_messages_R1(troubleshoot,temp=retry*0.2)
                     match = re.search(r'\[[\s\S]*\]', troubleshoot_res)
                     json_str = match.group()

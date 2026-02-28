@@ -226,29 +226,35 @@ class POISelector:
         
         return trees
     
-    def run_with_menu(self,online_opt,opt_iterations, use_skill, create_skill):
+    def run_with_menu(self, online_opt, opt_iterations, steps_per_iteration, use_skill, create_skill):
         """
         【新增】运行带菜单的完整流程
-        
+
         Args:
-            default_pois: 默认的POI列表（创建新决策树时使用）
+            online_opt: 是否启用在线优化
+            opt_iterations: 优化迭代次数
+            steps_per_iteration: 每次迭代优化的步骤数
+            use_skill: 是否使用历史经验
+            create_skill: 是否生成新经验
         """
         while True:
             self.show_main_menu()
-            
+
             choice = input("请输入您的选择: ").strip().upper()
-            
+
             if choice == "Q":
                 self._display_message("\n👋 感谢使用，再见！", "info")
                 break
-            
+
             elif choice == "1":
                 user_request = input("请输入您的需求（如：我想找一个适合周末去玩的地方）: ").strip()
                 if not user_request:
                     self._display_message("需求不能为空", "error")
                     continue
                 self._display_message("已接收需求,搜索候选POI中(可能需要花费较长时间)...","info")
-                log, log_ref, search_logs = search_process(user_request,on_policy_opt=online_opt,maximum_opt_iterations=opt_iterations,
+                log, log_ref, search_logs = search_process(user_request, on_policy_opt=online_opt,
+                                           maximum_opt_iterations=opt_iterations,
+                                           steps_per_iteration=steps_per_iteration,
                                            use_advice=use_skill)
                 
                 self._display_message("总结搜索经验中,后续搜索中可能会用到这些经验...","info")
@@ -315,7 +321,7 @@ class POISelector:
 # ============== 示例使用 ==============
 
 
-def demo_menu_mode(online_opt,opt_iterations, use_skill, create_skill):
+def demo_menu_mode(online_opt, opt_iterations, steps_per_iteration, use_skill, create_skill):
     """演示菜单模式"""
     llm=base_llm(system_prompt="")
     agent=Answer_ReActAgent(llm,tools=tools)
@@ -325,11 +331,11 @@ def demo_menu_mode(online_opt,opt_iterations, use_skill, create_skill):
         large_llm_api=llm.call_with_messages_R1,
         small_llm_api=llm.call_with_messages_small,
         agent_api=agent.run
-        
+
     )
-    
+
     # 运行带菜单的完整流程
-    selector.run_with_menu(online_opt,opt_iterations, use_skill, create_skill)
+    selector.run_with_menu(online_opt, opt_iterations, steps_per_iteration, use_skill, create_skill)
 
 
 def main():
@@ -345,22 +351,25 @@ def main():
                         help='基于本次任务和线上优化结果生成建议，供以后借鉴')
     
     # int 参数（可选，带默认值）
-    parser.add_argument('--opt-iterations', type=int, default=10, 
-                        help='在线优化迭代次数（默认: 10）')
-    
+    parser.add_argument('--opt-iterations', type=int, default=5,
+                        help='在线优化迭代次数（默认: 5）')
+    parser.add_argument('--steps-per-iteration', type=int, default=2,
+                        help='每次迭代优化的步骤数（默认: 2）')
+
     args = parser.parse_args()
-    
+
     print("\n" + "=" * 60)
     print("POI-Scout: 智能旅行目的地搜索Agent")
     print("=" * 60)
     print(f"\n参数设置：")
     print(f"  online_opt: {args.online_opt}")
     print(f"  opt_iterations: {args.opt_iterations}")
+    print(f"  steps_per_iteration: {args.steps_per_iteration}")
     print(f"  use_skill: {args.use_skill}")
     print(f"  create_skill: {args.create_skill}")
     print("=" * 60)
-    
-    demo_menu_mode(args.online_opt, args.opt_iterations, args.use_skill, args.create_skill)
+
+    demo_menu_mode(args.online_opt, args.opt_iterations, args.steps_per_iteration, args.use_skill, args.create_skill)
 
 if __name__ == "__main__":
     main()
